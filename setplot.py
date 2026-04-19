@@ -61,16 +61,16 @@ def setplot(plotdata=None):
     gauge_data = amrdata.GaugeData()
     gauge_data.read(plotdata.outdir)
 
-    storm = stormtools.Storm(surge_data.storm_file, file_format="data")
+    # storm = stormtools.Storm(surge_data.storm_file, file_format="data")
 
     # Load storm track
-    track = surgeplot.track_data(os.path.join(plotdata.outdir, 'fort.track'))
+    # track = surgeplot.track_data(os.path.join(plotdata.outdir, 'fort.track'))
 
     # Set afteraxes function
     def surge_afteraxes(cd):
         # 11:00 was 10:60 instead!
-        surgeplot.surge_afteraxes(cd, track, plot_track=True, style="rX",
-                                             kwargs={"markersize": 6})
+        # surgeplot.surge_afteraxes(cd, track, plot_track=True, style="rX",
+        #                                      kwargs={"markersize": 6})
         surgeplot.days_figure_title(cd, new_time=True)
 
     # Color limits
@@ -168,14 +168,14 @@ def setplot(plotdata=None):
     #  Hurricane Forcing fields
     #
     def forcing_afteraxes(cd, title=None):
-        surge_afteraxes(cd)
+        # surge_afteraxes(cd)
         box = np.array([-80, 27.5, -62.5, 45])
-        surgeplot.draw_box(plt.gca(), box, style='r-')
-        surgeplot.draw_box(plt.gca(), np.array([box[0]-storm.ramp_width,
-                                                box[1]-storm.ramp_width,
-                                                box[2]+storm.ramp_width,
-                                                box[3]+storm.ramp_width]),
-                            style='b--')
+        # surgeplot.draw_box(plt.gca(), box, style='r-')
+        # surgeplot.draw_box(plt.gca(), np.array([box[0]-storm.ramp_width,
+        #                                         box[1]-storm.ramp_width,
+        #                                         box[2]+storm.ramp_width,
+        #                                         box[3]+storm.ramp_width]),
+                            # style='b--')
 
     # Pressure field
     plotfigure = plotdata.new_plotfigure(name='Pressure')
