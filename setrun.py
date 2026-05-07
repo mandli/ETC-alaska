@@ -18,11 +18,11 @@ import numpy as np
 from clawpack.geoclaw.surge.storm import Storm
 import clawpack.clawutil as clawutil
 import clawpack.geoclaw.util as util
+from clawpack.geoclaw.netcdf_utils import TopoInterrogator
 
 # Time Conversions
 def days2seconds(days):
     return days * 60.0**2 * 24.0
-
 
 # Scratch directory for storing topo and storm files:
 CLAW = Path(os.environ["CLAW"])
@@ -66,11 +66,14 @@ def setrun(claw_pkg='geoclaw'):
     clawdata.num_dim = num_dim
 
     # Lower and upper edge of computational domain:
-    clawdata.lower[0] = -85.0      # west longitude
-    clawdata.upper[0] = -60.0      # east longitude
+    # Storm data extents:
+    #   lon = [-201.729736328125, -108.279736328125]
+    #   lat = [50.0116119384766, 76.1616119384766]
+    clawdata.lower[0] = -175.0      # west longitude
+    clawdata.upper[0] = -130.0      # east longitude
 
-    clawdata.lower[1] = 20.0       # south latitude
-    clawdata.upper[1] = 50.0       # north latitude
+    clawdata.lower[1] = 50.0       # south latitude
+    clawdata.upper[1] = 75.0       # north latitude
 
     # Number of grid cells:
     degree_factor = 4  # (0.25º,0.25º) ~ (25237.5 m, 27693.2 m) resolution
@@ -98,12 +101,7 @@ def setrun(claw_pkg='geoclaw'):
     # Initial time:
     # -------------
     clawdata.t0 =  days2seconds(0.0)
-    # clawdata.tfinal = days2seconds(4.0)
-    clawdata.tfinal = days2seconds(3.0)
-    # November storm 
-    #   start time "2018-11-14T08"
-    #   end time "2018-11-17T19" 16H + 2D + 19
-    clawdata.tfinal = 16*60**2 + days2seconds(2.0) + 19*60**2
+    clawdata.tfinal = days2seconds(20.0) # This is used with output_style=1
 
     # Restart from checkpoint file of a previous run?
     # If restarting, t0 above should be from original run, and the
@@ -125,7 +123,7 @@ def setrun(claw_pkg='geoclaw'):
 
     if clawdata.output_style == 1:
         # Output nout frames at equally spaced times up to tfinal:
-        recurrence = 24
+        recurrence = 6
         clawdata.num_output_times = int((clawdata.tfinal - clawdata.t0) *
                                         recurrence / (60**2 * 24))
 
@@ -312,26 +310,11 @@ def setrun(claw_pkg='geoclaw'):
 
     # More AMR parameters can be set -- see the defaults in pyclaw/data.py
 
-    # Battery gauge - Station ID: 8518750
-    rundata.gaugedata.gauges.append([1,-74.013,40.7,clawdata.t0,clawdata.tfinal])
-    # Kings point gauge - Station ID: 8516945
-    rundata.gaugedata.gauges.append([2,-73.77,40.81,clawdata.t0,clawdata.tfinal])
-    # Montauk, NY - Station ID: 8510560
-    rundata.gaugedata.gauges.append([3,-71.96,41.04833,clawdata.t0,clawdata.tfinal])
-    # Bridgeport, CT - Station ID: 8467150
-    rundata.gaugedata.gauges.append([4,-73.1816666667,41.1733333333,clawdata.t0,clawdata.tfinal])
-    # New Haven, CT - Station ID: 8465705
-    rundata.gaugedata.gauges.append([5,-72.915152,41.2235,clawdata.t0,clawdata.tfinal])
-    # Newport, RI - Station ID: 8452660 (71° 19.6 W, 41° 30.3 N)
-    rundata.gaugedata.gauges.append([6, -71.326667, 41.500833,clawdata.t0,clawdata.tfinal])
-    # Sandy Hook, NJ - Station ID: 8531680 (74° 0.6 W, 40° 28.0 N)
-    # moified to (74.01 W, 40.46 N)
-    rundata.gaugedata.gauges.append([7, -74.01, 40.46,clawdata.t0,clawdata.tfinal])
-    # Atlantic City, NJ - Station ID: 8534720 (74° 25.1 W, 39° 21.4 N)
-    rundata.gaugedata.gauges.append([8, -74.416944, 39.351111,clawdata.t0,clawdata.tfinal])
+    # Gauges
+    # rundata.gaugedata.gauges = [[1, -74.0, 40.7, clawdata.t0, clawdata.tfinal]]  # New York City
 
     # Force the gauges to also record the wind and pressure fields
-    # rundata.gaugedata.aux_out_fields = [4, 5, 6]
+    rundata.gaugedata.aux_out_fields = [4, 5, 6]
 
     # == setregions.data values ==
     regions = rundata.regiondata.regions
@@ -341,9 +324,6 @@ def setrun(claw_pkg='geoclaw'):
     regions.append([1, 4, clawdata.t0, clawdata.tfinal,
                           clawdata.lower[0], clawdata.upper[0],
                           clawdata.lower[1], clawdata.upper[1]])
-    # NYC Region
-    regions.append([1, 7, clawdata.t0, clawdata.tfinal,
-                          -74.5, -73.5, 40.3, 41.0])
 
     # Gauges
     dx = 0.25
@@ -357,10 +337,6 @@ def setrun(claw_pkg='geoclaw'):
         regions.append([6, 7, clawdata.t0, clawdata.tfinal,
                               gauge[1] - dx, gauge[1] + dx,
                               gauge[2] - dx, gauge[2] + dx])
-
-    # regions.append([5, 6, days2seconds(1), clawdata.tfinal, -74.25,-73.5,40.5,41]) # refine gauge 1,2,3
-    # regions.append([5, 6, days2seconds(1), clawdata.tfinal, -73.25,-72.75,41,41.5]) # refine gauge 4,5
-    # regions.append([6, 7, days2seconds(1), clawdata.tfinal, -72.25,-72,41,41.5]) # refine gauge 6
 
     # ------------------------------------------------------------------
     # GeoClaw specific parameters:
@@ -407,91 +383,12 @@ def setgeo(rundata):
     # == settopo.data values ==
     topo_data = rundata.topo_data
     topo_data.topofiles = []
-    # for topography, append lines of the form
-    #   [topotype, fname]
-    # See regions for control over these regions, need better bathy data for
-    # the smaller domains
-    topo_dir = Path(os.environ["DATA_PATH"]) / "topography"
-    # topo_data.topofiles.append([3, os.path.join(topo_dir, 'atlantic_1min.tt3')])
-    # topo_data.topofiles.append([3, os.path.join(topo_dir, 'newyork_3s.tt3')])
-    topo_data.topofiles.append([4, topo_dir / "GEBCO" / "GEBCO_2023.nc"])
-    # ncei_base_path = os.path.join(topo_dir, "ny_area", "ncei19_ny")
-    ncei_base_path = topo_dir / "coastal_atlantic_9th_second"
-
-    ncei_file_list = ["ncei19_n39x00_w075x00_2018v2.nc",
-                      "ncei19_n39x00_w075x25_2014v1.nc",
-                      "ncei19_n39x00_w075x50_2014v1.nc",
-                      "ncei19_n39x25_w074x75_2018v2.nc",
-                      "ncei19_n39x25_w075x00_2018v2.nc",
-                      "ncei19_n39x25_w075x25_2018v2.nc",
-                      "ncei19_n39x25_w075x50_2014v1.nc",
-                      "ncei19_n39x50_w074x50_2018v2.nc",
-                      "ncei19_n39x50_w074x75_2018v2.nc",
-                      "ncei19_n39x50_w075x25_2018v2.nc",
-                      "ncei19_n39x50_w075x50_2018v2.nc",
-                      "ncei19_n39x50_w075x75_2014v1.nc",
-                      "ncei19_n39x75_w074x25_2018v2.nc",
-                      "ncei19_n39x75_w074x50_2018v2.nc",
-                      "ncei19_n39x75_w075x50_2014v1.nc",
-                      "ncei19_n39x75_w075x75_2014v1.nc",
-                      "ncei19_n40x00_w074x25_2018v2.nc",
-                      "ncei19_n40x00_w075x25_2014v1.nc",
-                      "ncei19_n40x00_w075x50_2014v1.nc",
-                      "ncei19_n40x25_w074x00_2018v2.nc",
-                      "ncei19_n40x25_w074x25_2018v2.nc",
-                      "ncei19_n40x25_w074x75_2014v1.nc",
-                      "ncei19_n40x25_w075x00_2014v1.nc",
-                      "ncei19_n40x25_w075x25_2014v1.nc",
-                      "ncei19_n40x50_w074x00_2018v2.nc",
-                      "ncei19_n40x50_w074x25_2018v2.nc",
-                      "ncei19_n40x75_w073x00_2015v1.nc",
-                      "ncei19_n40x75_w073x25_2015v1.nc",
-                      "ncei19_n40x75_w073x50_2015v1.nc",
-                      "ncei19_n40x75_w073x75_2015v1.nc",
-                      "ncei19_n40x75_w074x00_2015v1.nc",
-                      "ncei19_n40x75_w074x25_2015v1.nc",
-                      "ncei19_n41x00_w072x25_2015v1.nc",
-                      "ncei19_n41x00_w072x50_2015v1.nc",
-                      "ncei19_n41x00_w072x75_2015v1.nc",
-                      "ncei19_n41x00_w073x00_2015v1.nc",
-                      "ncei19_n41x00_w073x25_2015v1.nc",
-                      "ncei19_n41x00_w073x50_2015v1.nc",
-                      "ncei19_n41x00_w073x75_2015v1.nc",
-                      "ncei19_n41x00_w074x00_2015v1.nc",
-                      "ncei19_n41x00_w074x25_2015v1.nc",
-                      "ncei19_n41x25_w072x00_2015v1.nc",
-                      "ncei19_n41x25_w072x25_2015v1.nc",
-                      "ncei19_n41x25_w072x50_2015v1.nc",
-                      "ncei19_n41x25_w072x75_2015v1.nc",
-                      "ncei19_n41x25_w073x00_2016v1.nc",
-                      "ncei19_n41x25_w073x25_2016v1.nc",
-                      "ncei19_n41x25_w073x50_2015v1.nc",
-                      "ncei19_n41x25_w073x75_2015v1.nc",
-                      "ncei19_n41x25_w074x00_2015v1.nc",
-                      "ncei19_n41x50_w072x00_2016v1.nc",
-                      "ncei19_n41x50_w072x25_2016v1.nc",
-                      "ncei19_n41x50_w072x50_2016v1.nc",
-                      "ncei19_n41x50_w072x75_2016v1.nc",
-                      "ncei19_n41x50_w073x00_2016v1.nc",
-                      "ncei19_n41x50_w074x00_2015v1.nc",
-                      "ncei19_n41x50_w074x25_2015v1.nc",
-                    ]
-    # Hudson: 40, 39, 49, 55
-    # CT: 48, 47, 46, 54, 53,52
-    # RI: 52, 51, 50
-    # LI Sound: 49, 48, 47, 46, 45, 44, 43, 42, 41
-    # LI 39, 38, 37, 36, 35, 34, 33, 32, 30, 29, 28, 27, 26
-    # NY: 40, 39, 31, 30
-    # NJ coast: 25, 24, 20, 19, 16, 13, 12, 7, 8, 3, 4, 0
-    # Chesapeake: 21, 22, 23, 18, 17, 15, 14, 11, 10, 9, 6, 5, 4, 2, 1, 0
-    # Sandy: range(24, 55)
-    for file_index in range(24, 55):
-        topo_data.topofiles.append([4, 
-                                ncei_base_path / ncei_file_list[file_index]])
-    # Add NJ coast
-    for file_index in [0, 3, 4, 8, 7, 12, 13, 16, 19, 20]:#, 24, 25]:
-        topo_data.topofiles.append([4, 
-                                ncei_base_path / ncei_file_list[file_index]])
+    topo_path = Path(os.environ["DATA_PATH"]) / "topography" / "GEBCO" / "GEBCO_2025.nc"
+    dx = 1.0
+    crop_bounds = [rundata.clawdata.lower[0] - dx, rundata.clawdata.upper[0] + dx,
+                   rundata.clawdata.lower[1] - dx, rundata.clawdata.upper[1] + dx]
+    topo_data.topofiles.extend(TopoInterrogator(topo_path, 
+                                                crop_bounds=crop_bounds).topo_entries())
 
     # ================a
     #  Set Surge Data
@@ -514,33 +411,20 @@ def setgeo(rundata):
     data.storm_file = (Path() / "etc_storm.storm").resolve()
 
     etc_storm = Storm()
-    # Wrap coordinates
-    # input_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT"
-    #                           / "f166d10549b1da216d3d9a1a3d9f6af2.nc").resolve()
-    # output_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT"
-    #                     / "f166d10549b1da216d3d9a1a3d9f6af2_wrap.nc").resolve()
-    # input_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT"
-    #                           / "subset_dec26_29_0pt25.nc").resolve()
-    # output_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT"
-    #                     / "subset_dec26_29_0pt25_wrap.nc").resolve()
-    input_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT"
-                              / "NOV2018_0pt25.nc").resolve()
-    output_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT"
-                        / "NOV2018_0pt25_wrap.nc").resolve()
-    util.wrap_coords(input_path, output_path=output_path,
-                                 dim_mapping={'t': 'valid_time'})
-    etc_storm.file_paths.append(output_path)
-    # etc_storm.time_offset = np.datetime64("2012-12-26")
-    etc_storm.time_offset = np.datetime64("2018-11-14T08:00:00.00")
+    etc_storm.file_paths.append(Path(os.environ["DATA_PATH"]) / "storms" 
+                                                              / "alaska" 
+                                                              / "h01_output" 
+                                                              / "uvp_latlon.nc")
+    etc_storm.time_offset = np.datetime64("2011-11-01T06:00:00.00")
     etc_storm.file_format = 'netcdf'
     etc_storm.scaling = [1.0, 1.0]
-    etc_storm.window_type = 'custom'
+    # etc_storm.window_type = 'custom'
     etc_storm.ramp_width = 2
     clawdata = rundata.clawdata
-    etc_storm.window = [-80, 27.5, -62.5, 45]
+    # etc_storm.window = [-80, 27.5, -62.5, 45]
     etc_storm.write(data.storm_file, file_format='data',
-                                     dim_mapping={"t": "valid_time"},
-                                     var_mapping={"pressure": "msl"},
+                                     dim_mapping={"time": "Time"},
+                                     var_mapping={"wind_u": "U", "wind_v": "V", "pressure": "P"},
                                      verbose=True)
 
     # =======================
@@ -557,11 +441,6 @@ def setgeo(rundata):
                                   rundata.clawdata.upper,
                                   [np.inf, 0.0, -np.inf],
                                   [0.050, 0.025]])
-
-    # Bahamas (79.5 W, 22 N) x (73.5 W, 27.5 N)
-    data.friction_regions.append([[-79.5, -73.5], [22, 27.5],
-                                  [np.inf, 0.0, -50, -np.inf],
-                                  [0.050, 0.050, 0.025]])
 
     return rundata
     # end of function setgeo
