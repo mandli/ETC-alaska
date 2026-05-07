@@ -390,15 +390,15 @@ def setgeo(rundata):
     topo_data.topofiles.extend(TopoInterrogator(topo_path, 
                                                 crop_bounds=crop_bounds).topo_entries())
 
-    # ================a
+    # ================
     #  Set Surge Data
     # ================
     data = rundata.surge_data
 
     # Source term controls
-    data.wind_forcing = True
+    # data.wind_forcing = True
     data.drag_law = 1
-    data.pressure_forcing = True
+    # data.pressure_forcing = True
 
     data.display_landfall_time = True
 
