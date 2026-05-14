@@ -89,14 +89,6 @@ def setplot(plotdata=None):
                                "ylimits": [clawdata.lower[1], clawdata.upper[1]],
                                "shrink": 1.0,
                                "figsize": [6.4, 4.8]},
-               'Tri-State Region': {"xlimits": [-74.5,-71.0],
-                                    "ylimits": [40.0,41.5],
-                                    "shrink": 0.75,
-                                    "figsize": [6.4 * 2, 4.8]},
-                'NYC': {"xlimits": [-74.2,-73.7],
-                        "ylimits": [40.4,40.85],
-                        "shrink": 1.0,
-                        "figsize": [6.4, 4.8]}
                }
     for (name, region_dict) in regions.items():
         [size * figsize_mult for size in region_dict['figsize']]
@@ -218,109 +210,110 @@ def setplot(plotdata=None):
     # ========================================================================
     #  Figures for gauges
     # ========================================================================
-    def plot_observed(current_data):
-        """Fetch and plot gauge data for gauges used."""
+    if gauge_data is not None and len(gauge_data.gauges) > 0:
+        def plot_observed(current_data):
+            """Fetch and plot gauge data for gauges used."""
 
-        # Map GeoClaw gauge number to NOAA gauge number and location/name
+            # Map GeoClaw gauge number to NOAA gauge number and location/name
 
-        gauge_mapping = {1: ('8518750', 'The Battery, NY'),
-                         2: ('8516945', 'Kings Point, NY'),
-                         3: ('8510560', 'Montauk, NY'),
-                         4: ('8467150', 'Bridgeport, CT'),
-                         5: ('8465705', 'New Haven, CT'),
-                         6: ('8452660', 'Newport, RI'),
-                         7: ('8531680', 'Sandy Hook, NJ'),
-                         8: ('8534720', 'Atlantic City, NJ')}
+            gauge_mapping = {1: ('8518750', 'The Battery, NY'),
+                            2: ('8516945', 'Kings Point, NY'),
+                            3: ('8510560', 'Montauk, NY'),
+                            4: ('8467150', 'Bridgeport, CT'),
+                            5: ('8465705', 'New Haven, CT'),
+                            6: ('8452660', 'Newport, RI'),
+                            7: ('8531680', 'Sandy Hook, NJ'),
+                            8: ('8534720', 'Atlantic City, NJ')}
 
-        station_id, station_name = gauge_mapping[current_data.gaugesoln.id]
-        # landfall_time = np.datetime64("2012-12-26T00:00")
-        # begin_date = datetime.datetime(2012, 12, 25, 0, 0)
-        # end_date = datetime.datetime(2012, 12, 30, 0, 0)
-        landfall_time = np.datetime64("2018-11-14T08:00:00.00")
-        begin_date = datetime.datetime(2018, 11, 14, 0, 0)
-        end_date = datetime.datetime(2018, 11, 18, 0, 0)
+            station_id, station_name = gauge_mapping[current_data.gaugesoln.id]
+            # landfall_time = np.datetime64("2012-12-26T00:00")
+            # begin_date = datetime.datetime(2012, 12, 25, 0, 0)
+            # end_date = datetime.datetime(2012, 12, 30, 0, 0)
+            landfall_time = np.datetime64("2018-11-14T08:00:00.00")
+            begin_date = datetime.datetime(2018, 11, 14, 0, 0)
+            end_date = datetime.datetime(2018, 11, 18, 0, 0)
 
-        # Fetch data if needed
-        date_time, water_level, tide = geoutil.fetch_noaa_tide_data(station_id,
-                                                                    begin_date,
-                                                                    end_date)
-        
-        if water_level is None:
-            print("*** Could not fetch gauge {}.".format(station_id))
-        else:
-            # Convert to seconds relative to landfall
-            t = (date_time - landfall_time) / np.timedelta64(1, 's')
-            t /= (24 * 60**2)
+            # Fetch data if needed
+            date_time, water_level, tide = geoutil.fetch_noaa_tide_data(station_id,
+                                                                        begin_date,
+                                                                        end_date)
+            
+            if water_level is None:
+                print("*** Could not fetch gauge {}.".format(station_id))
+            else:
+                # Convert to seconds relative to landfall
+                t = (date_time - landfall_time) / np.timedelta64(1, 's')
+                t /= (24 * 60**2)
 
-            # Detide
-            water_level -= tide
+                # Detide
+                water_level -= tide
 
-            # Plot data
-            ax = plt.gca()
-            ax.plot(t, water_level, color='lightgray', marker='x',
-                                    label="observed")
-            ax.set_title(station_name)
-            ax.legend()
+                # Plot data
+                ax = plt.gca()
+                ax.plot(t, water_level, color='lightgray', marker='x',
+                                        label="observed")
+                ax.set_title(station_name)
+                ax.legend()
 
 
-    plotfigure = plotdata.new_plotfigure(name='Gauge Surfaces', figno=300,
-                                         type='each_gauge')
-    plotfigure.show = True
-    plotfigure.clf_each_gauge = True
-
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.time_scale = 1 / (24 * 60**2)
-    plotaxes.grid = True
-    plotaxes.xlimits = [0, 3]
-    plotaxes.ylimits = [-0.5, 2.0]
-    plotaxes.title = "Surface"
-    plotaxes.ylabel = "Surface (m)"
-    plotaxes.time_label = "Days relative to 2012-12-26 00:00 UTC"
-    plotaxes.afteraxes = plot_observed
-
-    plotitem = plotaxes.new_plotitem(plot_type='1d_plot')
-    plotitem.plot_var = surgeplot.gauge_surface
-    plotitem.kwargs = {"label": "computed"}
-    # Plot red area if gauge is dry
-    plotitem = plotaxes.new_plotitem(plot_type='1d_plot')
-    plotitem.plot_var = surgeplot.gauge_dry_regions
-    plotitem.kwargs = {"color":'lightcoral', "linewidth":5, "label": "dry"}
-
-    #
-    #  Gauge Location Plots
-    #
-    def gauge_location_afteraxes(cd):
-        # plt.subplots_adjust(left=0.12, bottom=0.06, right=0.97, top=0.97)
-        surge_afteraxes(cd)
-        gaugetools.plot_gauge_locations(cd.plotdata, gaugenos='all',
-                                        format_string='ko', add_labels=True)
-
-    gauge_locations = {0: [[-75, -70], [38, 42]]}
-    dx = 0.125
-    # for gauge in gauge_data.gauges:
-    #     x, y = gauge[1:3]
-    #     gauge_locations[gauge[0]] = [[x-dx, x+dx], [y-dx, y+dx]]
-
-    for (gauge_id, gauge_loc) in gauge_locations.items():
-        if gauge_id == 0:
-            fig_name = "All Gauge Locations"
-        else:
-            fig_name = f"Gauge Location {gauge_id}"
-        plotfigure = plotdata.new_plotfigure(name=fig_name)
+        plotfigure = plotdata.new_plotfigure(name='Gauge Surfaces', figno=300,
+                                            type='each_gauge')
         plotfigure.show = True
+        plotfigure.clf_each_gauge = True
 
-        # Set up for axes in this figure:
         plotaxes = plotfigure.new_plotaxes()
-        plotaxes.title = fig_name
-        plotaxes.scaled = True
-        plotaxes.xlimits = gauge_loc[0]
-        plotaxes.ylimits = gauge_loc[1]
-        plotaxes.afteraxes = gauge_location_afteraxes
-        surgeplot.add_surface_elevation(plotaxes, bounds=surface_limits)
-        surgeplot.add_land(plotaxes, bounds=[0.0, 20.0])
-        plotaxes.plotitem_dict['surface'].amr_patchedges_show = [1] * 10
-        # plotaxes.plotitem_dict['surface'].pcolor_cmap = surface_cmap
-        plotaxes.plotitem_dict['land'].amr_patchedges_show = [1] * 10
+        plotaxes.time_scale = 1 / (24 * 60**2)
+        plotaxes.grid = True
+        plotaxes.xlimits = [0, 3]
+        plotaxes.ylimits = [-0.5, 2.0]
+        plotaxes.title = "Surface"
+        plotaxes.ylabel = "Surface (m)"
+        plotaxes.time_label = "Days relative to 2012-12-26 00:00 UTC"
+        plotaxes.afteraxes = plot_observed
+
+        plotitem = plotaxes.new_plotitem(plot_type='1d_plot')
+        plotitem.plot_var = surgeplot.gauge_surface
+        plotitem.kwargs = {"label": "computed"}
+        # Plot red area if gauge is dry
+        plotitem = plotaxes.new_plotitem(plot_type='1d_plot')
+        plotitem.plot_var = surgeplot.gauge_dry_regions
+        plotitem.kwargs = {"color":'lightcoral', "linewidth":5, "label": "dry"}
+
+        #
+        #  Gauge Location Plots
+        #
+        def gauge_location_afteraxes(cd):
+            # plt.subplots_adjust(left=0.12, bottom=0.06, right=0.97, top=0.97)
+            surge_afteraxes(cd)
+            gaugetools.plot_gauge_locations(cd.plotdata, gaugenos='all',
+                                            format_string='ko', add_labels=True)
+
+        gauge_locations = {0: [[-75, -70], [38, 42]]}
+        dx = 0.125
+        # for gauge in gauge_data.gauges:
+        #     x, y = gauge[1:3]
+        #     gauge_locations[gauge[0]] = [[x-dx, x+dx], [y-dx, y+dx]]
+
+        for (gauge_id, gauge_loc) in gauge_locations.items():
+            if gauge_id == 0:
+                fig_name = "All Gauge Locations"
+            else:
+                fig_name = f"Gauge Location {gauge_id}"
+            plotfigure = plotdata.new_plotfigure(name=fig_name)
+            plotfigure.show = True
+
+            # Set up for axes in this figure:
+            plotaxes = plotfigure.new_plotaxes()
+            plotaxes.title = fig_name
+            plotaxes.scaled = True
+            plotaxes.xlimits = gauge_loc[0]
+            plotaxes.ylimits = gauge_loc[1]
+            plotaxes.afteraxes = gauge_location_afteraxes
+            surgeplot.add_surface_elevation(plotaxes, bounds=surface_limits)
+            surgeplot.add_land(plotaxes, bounds=[0.0, 20.0])
+            plotaxes.plotitem_dict['surface'].amr_patchedges_show = [1] * 10
+            # plotaxes.plotitem_dict['surface'].pcolor_cmap = surface_cmap
+            plotaxes.plotitem_dict['land'].amr_patchedges_show = [1] * 10
 
     # -----------------------------------------
     # Parameters used only when creating html and/or latex hardcopy
