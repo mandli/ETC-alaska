@@ -18,7 +18,7 @@ import numpy as np
 from clawpack.geoclaw.surge.storm import Storm
 import clawpack.clawutil as clawutil
 import clawpack.geoclaw.util as util
-from clawpack.geoclaw.netcdf_utils import TopoInterrogator
+from clawpack.geoclaw.netcdf_utils import TopoInspector
 
 # Time Conversions
 def days2seconds(days):
@@ -69,10 +69,10 @@ def setrun(claw_pkg='geoclaw'):
     # Storm data extents:
     #   lon = [-201.729736328125, -108.279736328125]
     #   lat = [50.0116119384766, 76.1616119384766]
-    clawdata.lower[0] = -175.0      # west longitude
+    clawdata.lower[0] = -190.0      # west longitude
     clawdata.upper[0] = -130.0      # east longitude
 
-    clawdata.lower[1] = 50.0       # south latitude
+    clawdata.lower[1] = 45.0       # south latitude
     clawdata.upper[1] = 75.0       # north latitude
 
     # Number of grid cells:
@@ -101,7 +101,7 @@ def setrun(claw_pkg='geoclaw'):
     # Initial time:
     # -------------
     clawdata.t0 =  days2seconds(0.0)
-    clawdata.tfinal = days2seconds(20.0) # This is used with output_style=1
+    clawdata.tfinal = days2seconds(1.0) # This is used with output_style=1
 
     # Restart from checkpoint file of a previous run?
     # If restarting, t0 above should be from original run, and the
@@ -123,7 +123,7 @@ def setrun(claw_pkg='geoclaw'):
 
     if clawdata.output_style == 1:
         # Output nout frames at equally spaced times up to tfinal:
-        recurrence = 6
+        recurrence = 24
         clawdata.num_output_times = int((clawdata.tfinal - clawdata.t0) *
                                         recurrence / (60**2 * 24))
 
@@ -321,9 +321,14 @@ def setrun(claw_pkg='geoclaw'):
     # to specify regions of refinement append lines of the form
     #  [minlevel,maxlevel,t1,t2,x1,x2,y1,y2]
     # Entire domain
-    regions.append([1, 4, clawdata.t0, clawdata.tfinal,
+    regions.append([1, 1, clawdata.t0, clawdata.tfinal,
                           clawdata.lower[0], clawdata.upper[0],
                           clawdata.lower[1], clawdata.upper[1]])
+    
+    # Region around specific area of interest
+    regions.append([1, 2, clawdata.t0, clawdata.tfinal,
+                          -175, -160,
+                          55, clawdata.upper[1]])
 
     # Gauges
     dx = 0.25
@@ -387,8 +392,8 @@ def setgeo(rundata):
     dx = 1.0
     crop_bounds = [rundata.clawdata.lower[0] - dx, rundata.clawdata.upper[0] + dx,
                    rundata.clawdata.lower[1] - dx, rundata.clawdata.upper[1] + dx]
-    topo_data.topofiles.extend(TopoInterrogator(topo_path, 
-                                                crop_bounds=crop_bounds).topo_entries())
+    topo_data.topofiles.extend(TopoInspector(topo_path, 
+                                        crop_bounds=crop_bounds).topo_entries())
 
     # ================
     #  Set Surge Data
@@ -411,19 +416,21 @@ def setgeo(rundata):
     data.storm_file = (Path() / "etc_storm.storm").resolve()
 
     etc_storm = Storm()
-    etc_storm.file_paths.append(Path(os.environ["DATA_PATH"]) / "storms" 
-                                                              / "alaska" 
-                                                              / "h01_output" 
+    etc_storm.file_paths.append(Path(os.environ["DATA_PATH"]) / "storms"
+                                                              / "alaska"
+                                                              / "h01_output"
                                                               / "uvp_latlon.nc")
     etc_storm.time_offset = np.datetime64("2011-11-01T06:00:00.00")
     etc_storm.file_format = 'netcdf'
-    etc_storm.scaling = [1.0, 1.0]
-    # etc_storm.window_type = 'custom'
+    etc_storm.scaling = [1.0, 1.0]   # [wind, pressure] field scaling
     etc_storm.ramp_width = 2
-    clawdata = rundata.clawdata
-    # etc_storm.window = [-80, 27.5, -62.5, 45]
+    # Optional met controls (defaults shown):
+    #   etc_storm.crop_extent = [lon0, lon1, lat0, lat1]  # restrict forcing
+    #   etc_storm.storm_time_scale = 1.0                  # >1 slower, <1 faster
+    #   etc_storm.x_shift = 0.0; etc_storm.y_shift = 0.0  # registration offset
+    # Coordinates are auto-discovered by MetInspector; only the non-standard
+    # wind/pressure variable names need an explicit var_mapping.
     etc_storm.write(data.storm_file, file_format='data',
-                                     dim_mapping={"time": "Time"},
                                      var_mapping={"wind_u": "U", "wind_v": "V", "pressure": "P"},
                                      verbose=True)
 

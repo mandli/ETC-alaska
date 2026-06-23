@@ -5,16 +5,14 @@ from pathlib import Path
 
 import numpy as np
 
-import batch.batch
+import batch
 from clawpack.geoclaw.surge.storm import Storm
-import clawpack.clawutil as clawutil
-import clawpack.geoclaw.util as util
 
 scratch_dir = os.path.join(os.environ["CLAW"], 'geoclaw', 'scratch')
 
 str_val = lambda value: str(int(value * 10)).zfill(2)
 
-class ETCJob(batch.batch.Job):
+class ETCJob(batch.Job):
 
     def __init__(self, storm_path, article=False, scaling=1.0, 
                        sea_level=0.0, levels=2):
@@ -35,12 +33,6 @@ class ETCJob(batch.batch.Job):
         self.rundata.amrdata.amr_levels_max = levels
         self.rundata.geo_data.sea_level = sea_level
 
-        # Point surge.data to the appropriate storm file
-        # TODO: Check to if the path to the data already exists
-        self.rundata.surge_data.storm_file = (Path(os.environ['DATA_PATH'])
-                                / "surge" / "ETC_storms" / f"{self.prefix}_data"
-                                / f"{self.prefix}.storm").resolve()
-        
         # Path to storm data
         self.storm_path = storm_path
 
@@ -53,51 +45,45 @@ class ETCJob(batch.batch.Job):
         return output
 
 
-    def write_data_objects(self):
+    def write_data_objects(self, path):
         r""""""
 
-        # Write out storm
+        # Storm file lives in the job's run directory as "etc_storm.storm",
+        # matching the path set in setrun.py.
+        self.rundata.surge_data.storm_file = (path / "etc_storm.storm").resolve()
+
+        # Write out storm.  Longitude wrapping and coordinate discovery are
+        # handled by MetInspector at write time, so the NetCDF file can be
+        # passed directly without any pre-wrapping step.
         etc_storm = Storm()
-        # Wrap coordinates
-        # input_path = (storm_path).resolve()
-        # output_path = ().resolve()
-        # util.wrap_coords(input_path, output_path=output_path,
-                                    # dim_mapping={'t': 'valid_time'})
         etc_storm.file_paths.append(self.storm_path)
-        # etc_storm.time_offset = np.datetime64("2012-12-26")
-        etc_storm.time_offset = np.datetime64("2018-11-14T08:00:00.00")
+        etc_storm.time_offset = np.datetime64("2011-11-01T06:00:00.00")
         etc_storm.file_format = 'netcdf'
-        etc_storm.scaling = [self.scaling, 1.0]
-        etc_storm.window_type = 'custom'
+        etc_storm.scaling = [self.scaling, 1.0]   # [wind, pressure] scaling
         etc_storm.ramp_width = 2
-        etc_storm.window = [-80, 27.5, -62.5, 45]
+        # Optional: restrict the forcing to a sub-window of the file.
+        #   etc_storm.crop_extent = [lon0, lon1, lat0, lat1]
+        # Coordinates are auto-discovered; only the non-standard wind/pressure
+        # variable names need an explicit var_mapping.
         etc_storm.write(self.rundata.surge_data.storm_file,
                                         file_format='data',
-                                        dim_mapping={"t": "valid_time"},
-                                        var_mapping={"pressure": "msl"},
+                                        var_mapping={"wind_u": "U", "wind_v": "V",
+                                                     "pressure": "P"},
                                         verbose=True)
 
         # Write out all data files
-        super(ETCJob, self).write_data_objects()
+        super(ETCJob, self).write_data_objects(path)
 
-def wrap_storm_coords(path):
-    r"""Wrap storm coordinates and save to new file."""
-
-    output_path = path.parent / f"{path.stem}_wrap.nc"
-    util.wrap_coords(path, output_path=output_path,
-                                dim_mapping={'t': 'valid_time'})
-    return output_path
+    def post_run(self, result):
+        r"""Plot each job once it finishes."""
+        batch.plot_job(result, setplot="setplot.py", format="binary")
 
 if __name__ == '__main__':
 
-    base_path = (Path(os.environ['DATA_PATH']) / "ETC_NASA_SLCT").resolve()
-    # unwrapped_storm_paths = [base_path / "DEC2012_0pt25.nc",
-    #                          base_path / "DEC2012_1pt00.nc",
-    #                          base_path / "DEC2012_1pt50.nc"]
-    unwrapped_storm_paths = [base_path / "NOV2018_0pt25.nc",
-                             base_path / "NOV2018_1pt00.nc",
-                             base_path / "NOV2018_1pt50.nc"]
-    storm_paths = [wrap_storm_coords(path) for path in unwrapped_storm_paths]
+    # Currently a single storm; list structure left in place so additional
+    # storms can be appended as the study expands (cf. ETC-NSLT project).
+    base_path = (Path(os.environ['DATA_PATH']) / "storms" / "alaska").resolve()
+    storm_paths = [base_path / "h01_output" / "uvp_latlon.nc"]
 
     jobs = []
     for sea_level in [0.0]:
@@ -112,9 +98,8 @@ if __name__ == '__main__':
                                        sea_level=sea_level,
                                        levels=amr_max_levels))
 
-    controller = batch.batch.BatchController(jobs)
-    controller.wait = True
-    controller.plot = True
-    controller.parallel = True
+    # ParallelExecutor is the default; per-job plotting is handled by
+    # ETCJob.post_run.  run(wait=True) blocks until all jobs finish.
+    controller = batch.BatchController(jobs)
     print(controller)
-    controller.run()
+    controller.run(wait=True)
